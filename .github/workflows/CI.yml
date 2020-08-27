@@ -10,6 +10,11 @@ on:
   pull_request:
     branches: [ master, work ]
 
+env:
+  DEBOOTSTRAP_SUITE: buster
+  DEBOOTSTRAP_DATE: 2020-08-15
+
+
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   # This workflow contains a single job called "build"
@@ -22,24 +27,32 @@ jobs:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
 
-      # Runs a single command using the runners shell
-      - name: Run a one-line script
-        run: echo Hello, world!
+      - name: Cache
+        uses: actions/cache@v2.1.1
+        with:
+          # A list of files, directories, and wildcard patterns to cache and restore
+          path: $GITHUB_WORKSPACE./cache
+          # An explicit key for restoring and saving the cache
+          key: cache
 
       # Runs a set of commands using the runners shell
-      - name: Run a multi-line script
+      - name: Install multi-arch buildx environment
         run: |
-          echo Add other actions to build,
-          echo test, and deploy your project.
+          # Install buildx from our container
+          docker run --name installbuildx dubodubonduponey/utils /dist/buildx version
+          mkdir -p ~/.docker/cli-plugins
+          docker cp installbuildx:/dist/buildx ~/.docker/cli-plugins/docker-buildx
+          docker rm -f installbuildx
+          # Enable multi-arch building
+          docker run --rm --privileged docker/binfmt:a7996909642ee92942dcd6cff44b9b95f08dad64
 
-      - name: Env
-        run: env
+      - name: hadolint install
+        run: |
+          curl -sL -o hadolint "https://github.com/hadolint/hadolint/releases/download/v1.18.0/hadolint-$(uname -s)-$(uname -m)"
+          chmod 700 ./hadolint
 
-      - name: dpkg
-        run: dpkg -l
-
-      - name: docker version
-        run: docker version
-
-      - name: curl
-        run: which curl
+      - name: test
+        run: |
+          PATH=$PATH:$(pwd)
+          cd "$GITHUB_WORKSPACE"
+          ./test.sh
