@@ -58,6 +58,7 @@ RUN           arch="${TARGETPLATFORM#*/}"; \
 #######################
 # Builder assembly
 #######################
+# hadolint ignore=DL3006
 FROM          $BUILDER_BASE                                                                                             AS builder
 
 COPY          --from=builder-healthcheck /dist/boot/bin /dist/boot/bin
