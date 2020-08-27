@@ -75,11 +75,11 @@ FROM          $RUNTIME_BASE                                                     
 
 USER          root
 
+#                nano \
 RUN           apt-get update -qq          && \
               apt-get install -qq --no-install-recommends \
                 bzip2=1.0.6-9.2~deb10u1 \
                 xz-utils=5.2.4-1 \
-                nano \
                 gnupg=2.2.12-1+deb10u1 && \
               apt-get -qq autoremove      && \
               apt-get -qq clean           && \
