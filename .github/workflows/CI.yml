@@ -1,41 +1,39 @@
-# This is a basic workflow to help you get started with Actions
-
 name: CI
 
-# Controls when the action will run. Triggers the workflow on push or pull request
-# events but only for the master branch
-on:
-  push:
-    branches: [ master, work ]
-  pull_request:
-    branches: [ master, work ]
+on: [push, pull_request]
 
 env:
   DEBOOTSTRAP_SUITE: buster
-  DEBOOTSTRAP_DATE: 2020-08-15
+  DEBOOTSTRAP_DATE: 2020-08-01
+  APT_OPTIONS: "Acquire::HTTP::proxy=http://localhost:3142"
 
-
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
-  # This workflow contains a single job called "build"
-  build:
+  test:
     # The type of runner that the job will run on
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+      - name: Checks-out repository
+        uses: actions/checkout@v2
 
-      - name: Cache
+      - name: Enable cache
         uses: actions/cache@v2.1.1
         with:
-          # A list of files, directories, and wildcard patterns to cache and restore
-          path: $GITHUB_WORKSPACE./cache
-          # An explicit key for restoring and saving the cache
+          path: $GITHUB_WORKSPACE/cache
           key: cache
 
-      # Runs a set of commands using the runners shell
+      - name: Install hadolint
+        run: |
+          curl -sL -o hadolint "https://github.com/hadolint/hadolint/releases/download/v1.18.0/hadolint-$(uname -s)-$(uname -m)"
+          chmod 700 ./hadolint
+
+      - name: Start apt proxy
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/cache/apt"
+          chmod a+rwx "$GITHUB_WORKSPACE/cache/apt"
+          docker run -d --read-only --cap-drop=ALL --volume $GITHUB_WORKSPACE/cache/apt:/data --expose 3142 dubodubonduponey/aptutil
+
       - name: Install multi-arch buildx environment
         run: |
           # Install buildx from our container
@@ -45,11 +43,6 @@ jobs:
           docker rm -f installbuildx
           # Enable multi-arch building
           docker run --rm --privileged docker/binfmt:a7996909642ee92942dcd6cff44b9b95f08dad64
-
-      - name: hadolint install
-        run: |
-          curl -sL -o hadolint "https://github.com/hadolint/hadolint/releases/download/v1.18.0/hadolint-$(uname -s)-$(uname -m)"
-          chmod 700 ./hadolint
 
       - name: test
         run: |
