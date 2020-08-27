@@ -13,8 +13,7 @@ ARG           GIT_VERSION=51ebf8ca3d255e0c846307bf72740f731e6210c3
 WORKDIR       $GOPATH/src/$GIT_REPO
 RUN           git clone git://$GIT_REPO .
 RUN           git checkout $GIT_VERSION
-RUN           arch="${TARGETPLATFORM#*/}"; \
-              env GOOS=linux GOARCH="${arch%/*}" go build -v -ldflags "-s -w" \
+RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w" \
                 -o /dist/boot/bin/http-health ./cmd/http
 
 #######################
@@ -25,13 +24,11 @@ FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                           
 
 ARG           GIT_REPO=github.com/aptly-dev/aptly
 ARG           GIT_VERSION=24a027194ea8818307083396edb76565f41acc92
-ARG           GO_LDFLAGS="-s -w"
 
 WORKDIR       $GOPATH/src/$GIT_REPO
 RUN           git clone git://$GIT_REPO .
 RUN           git checkout $GIT_VERSION
-RUN           arch="${TARGETPLATFORM#*/}"; \
-              env GOOS=linux GOARCH="${arch%/*}" go build -v -ldflags "$GO_LDFLAGS -X main.Version=$BUILD_VERSION" \
+RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w -X main.Version=$BUILD_VERSION" \
                 -o /dist/boot/bin/aptly ./main.go
 
 #######################
@@ -43,7 +40,6 @@ FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                           
 # This is 1.0.5
 ARG           GIT_REPO=github.com/caddyserver/caddy
 ARG           GIT_VERSION=11ae1aa6b88e45b077dd97cb816fe06cd91cca67
-ARG           GO_LDFLAGS="-s -w"
 
 WORKDIR       $GOPATH/src/$GIT_REPO
 RUN           git clone https://$GIT_REPO .
@@ -51,8 +47,7 @@ RUN           git checkout $GIT_VERSION
 
 COPY          builder/main.go cmd/caddy/main.go
 
-RUN           arch="${TARGETPLATFORM#*/}"; \
-              GOOS=linux GOARCH="${arch%/*}" go build -v -ldflags "$GO_LDFLAGS" \
+RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w" \
                 -o /dist/boot/bin/caddy ./cmd/caddy
 
 #######################
