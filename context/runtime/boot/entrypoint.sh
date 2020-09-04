@@ -49,8 +49,8 @@ $*
 %commit
 %echo done" | gpg "${GPG_ARGS[@]}" --batch --generate-key /dev/stdin >/dev/null 2>&1
   gpg "${GPG_ARGS[@]}" --output "$GPG_HOME"/snapshot-signing-public-key.pgp --armor --export "$mail"
-  gpg --no-default-keyring --keyring "$GPG_HOME"/trusted-export.gpg --import "$GPG_HOME"/snapshot-signing-public-key.pgp
-  >&2 printf "You need to gpg import %s to consume this repo - alternatively, copy over %s as /etc/apt/trusted.gpg\n" "$GPG_HOME/snapshot-signing-public-key.pgp" "$GPG_HOME/trusted-export.gpg"
+#  gpg --no-default-keyring --keyring "$GPG_HOME"/trusted-export.gpg --import "$GPG_HOME"/snapshot-signing-public-key.pgp
+  >&2 printf "You need to apt-key add %s to consume this repo\n" "$GPG_HOME/snapshot-signing-public-key.pgp"
 }
 
 aptly::refresh(){
@@ -99,6 +99,7 @@ case "$com" in
 "create")
   # Example: my-buster-updates-mirror http://deb.debian.org/debian buster-updates main contrib non-free
   aptly -keyring="$KEYRING_LOCATION" -config="$CONFIG_LOCATION" -architectures="$ARCHITECTURES" mirror create "$@"
+  exit
   ;;
 "trust")
   # Typically "key server" "keys...": keys.gnupg.net 04EE7237B7D453EC 648ACFD622F3D138 EF0F382A1A7B6500 DCC9EFBF77E11517 AA8E81B4331F7F50 112695A0E562B32A
@@ -112,29 +113,19 @@ case "$com" in
   ;;
 "refresh")
   aptly::refresh
+  exit
+  ;;
+*)
+  #aptly::refresh &
+
+  # Bonjour the container
+  if [ "${MDNS_NAME:-}" ]; then
+    goello-server -name "$MDNS_NAME" -host "$MDNS_HOST" -port "$PORT" -type "$MDNS_TYPE" &
+  fi
+  # Start our little caddy
+  exec caddy run -config /config/caddy/main.conf --adapter caddyfile "$@"
   ;;
 esac
-
-dnssd::advertize() {
-  local name="$1"
-  local type="$2"
-  local port="$3"
-  shift
-  shift
-  shift
-
-  while true; do
-    dns-sd -R "$name" "$type" . "$port" "$@" || {
-      >&2 printf "dns-sd just failed! Going to sleep a bit and try again"
-      sleep 10
-    }
-  done
-}
-
-#aptly::refresh &
-#dnssd::advertize "apt" "_apt._tcp" "$PORT" &
-
-exec caddy run -config /config/caddy/main.conf --adapter caddyfile "$@"
 
 #############################
 # Key generation part

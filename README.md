@@ -15,9 +15,9 @@ docker exec -ti apt-mirror /boot/entrypoint.sh trust keys.gnupg.net 04EE7237B7D4
 docker exec -ti apt-mirror /boot/entrypoint.sh init "Dubo Dubon Duponey" dubodubonduponey@jsboot.space
 
 # Create new mirrors
-docker exec -ti apt-mirror /boot/entrypoint.sh aptly mirror create my-buster-mirror http://deb.debian.org/debian buster main contrib non-free
-docker exec -ti apt-mirror /boot/entrypoint.sh aptly mirror create my-buster-updates-mirror http://deb.debian.org/debian buster-updates main contrib non-free
-docker exec -ti apt-mirror /boot/entrypoint.sh aptly mirror create my-buster-security-mirror http://security.debian.org/debian-security buster/updates main contrib non-free
+docker exec -ti apt-mirror /boot/entrypoint.sh create buster-main-mirror http://deb.debian.org/debian buster main
+docker exec -ti apt-mirror /boot/entrypoint.sh create buster-updates-main-mirror http://deb.debian.org/debian buster-updates main
+docker exec -ti apt-mirror /boot/entrypoint.sh create buster-security-main-mirror http://security.debian.org/debian-security buster/updates main
 
 # Force a first refresh of all mirrors
 docker exec -ti apt-mirror /boot/entrypoint.sh refresh

@@ -52,6 +52,22 @@ RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's
                 -o /dist/boot/bin/caddy ./cmd/caddy
 
 #######################
+# Goello
+#######################
+# hadolint ignore=DL3006
+FROM          --platform=$BUILDPLATFORM $BUILDER_BASE                                                                   AS builder-goello
+
+ARG           GIT_REPO=github.com/dubo-dubon-duponey/goello
+ARG           GIT_VERSION=6f6c96ef8161467ab25be45fe3633a093411fcf2
+
+WORKDIR       $GOPATH/src/$GIT_REPO
+RUN           git clone git://$GIT_REPO .
+RUN           git checkout $GIT_VERSION
+# hadolint ignore=DL4006
+RUN           env GOOS=linux GOARCH="$(printf "%s" "$TARGETPLATFORM" | sed -E 's/^[^/]+\/([^/]+).*/\1/')" go build -v -ldflags "-s -w" \
+                -o /dist/boot/bin/goello-server ./cmd/server/main.go
+
+#######################
 # Builder assembly
 #######################
 # hadolint ignore=DL3006
@@ -60,6 +76,7 @@ FROM          $BUILDER_BASE                                                     
 COPY          --from=builder-healthcheck /dist/boot/bin /dist/boot/bin
 COPY          --from=builder-aptly /dist/boot/bin /dist/boot/bin
 COPY          --from=builder-caddy /dist/boot/bin /dist/boot/bin
+COPY          --from=builder-goello /dist/boot/bin /dist/boot/bin
 
 RUN           chmod 555 /dist/boot/bin/*; \
               epoch="$(date --date "$BUILD_CREATED" +%s)"; \
@@ -94,14 +111,21 @@ EXPOSE        8080/tcp
 VOLUME        /data
 VOLUME        /tmp
 
-ENV           ARCHITECTURES=armel,armhf,arm64,amd64,i386,s390x,ppc64el
+ENV           ARCHITECTURES=armel,armhf,arm64,amd64,s390x,ppc64el
 
-ENV           USERNAME=dubo-dubon-duponey
-ENV           PASSWORD=base64_bcrypt_encoded_use_caddy_hash_password_to_generate
-ENV           REALM="My precious"
+# mDNS
+ENV           MDNS_NAME="Fancy Apt Mirror Service Name"
+ENV           MDNS_HOST="apt-mirror"
+ENV           MDNS_TYPE=_apt._tcp
+
+# Authentication
+ENV           USERNAME="dubo-dubon-duponey"
+ENV           PASSWORD="base64_bcrypt_encoded_use_caddy_hash_password_to_generate"
+ENV           REALM="My precious mirror"
+
+# Log level and port
 ENV           LOG_LEVEL=info
 ENV           PORT=8080
-
 
 # System constants, unlikely to ever require modifications in normal use
 ENV           HEALTHCHECK_URL=http://127.0.0.1:10042/healthcheck
