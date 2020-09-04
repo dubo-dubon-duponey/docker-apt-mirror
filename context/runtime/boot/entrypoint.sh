@@ -116,12 +116,13 @@ case "$com" in
   exit
   ;;
 *)
-  #aptly::refresh &
-
   # Bonjour the container
   if [ "${MDNS_NAME:-}" ]; then
     goello-server -name "$MDNS_NAME" -host "$MDNS_HOST" -port "$PORT" -type "$MDNS_TYPE" &
   fi
+  # Start our daily refresher
+  aptly::refresh &
+
   # Start our little caddy
   exec caddy run -config /config/caddy/main.conf --adapter caddyfile "$@"
   ;;
