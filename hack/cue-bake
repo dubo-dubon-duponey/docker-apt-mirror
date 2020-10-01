@@ -35,7 +35,7 @@ setup::buildctl(){
   local destination="$1"
   if ! command -v "$destination/buildctl" > /dev/null; then
     mkdir -p "$destination"
-    docker rm -f installbuildctl
+    docker rm -f installbuildctl || true
     docker run --name installbuildctl --entrypoint buildctl dubodubonduponey/buildkit --version
     case $(uname) in
       "Darwin")
