@@ -7,11 +7,40 @@ set -o errexit -o errtrace -o functrace -o nounset -o pipefail
   exit 1
 }
 
+# Helpers
+case "${1:-}" in
+  # Short hand helper to generate password hash
+  "hash")
+    shift
+    # Interactive.
+    echo "Going to generate a password hash with salt: $SALT"
+    caddy hash-password -algorithm bcrypt -salt "$SALT"
+    exit
+  ;;
+  # Helper to get the ca.crt out (once initialized)
+  "cert")
+    if [ "$TLS" != internal ]; then
+      echo "Your server is not configured in self-signing mode. This command is a no-op in that case."
+      exit 1
+    fi
+    if [ ! -e "/certs/pki/authorities/local/root.crt" ]; then
+      echo "No root certificate installed or generated. Run the container so that a cert is generated, or provide one at runtime."
+      exit 1
+    fi
+    cat /certs/pki/authorities/local/root.crt
+    exit
+  ;;
+esac
+
+# Given how the caddy conf is set right now, we cannot have these be not set, so, stuff in randomized shit in there
+readonly SALT="${SALT:-"$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 64 | base64)"}"
+readonly USERNAME="${USERNAME:-"$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 64)"}"
+readonly PASSWORD="${PASSWORD:-$(caddy hash-password -algorithm bcrypt -salt "$SALT" -plaintext "$(head /dev/urandom | tr -dc A-Za-z0-9 | head -c 64)")}"
+
 # System constants
-readonly PORT="${PORT:-}"
 readonly ARCHITECTURES="${ARCHITECTURES:-}"
 
-readonly CONFIG_LOCATION="${CONFIG_LOCATION:-/config/aptly.conf}"
+readonly CONFIG_LOCATION="${CONFIG_LOCATION:-/config/aptly/main.conf}"
 readonly GPG_HOME="/data/gpg"
 readonly KEYRING_LOCATION="${KEYRING_LOCATION:-$GPG_HOME/trustedkeys.gpg}"
 
@@ -116,15 +145,16 @@ case "$com" in
   exit
   ;;
 *)
-  # Bonjour the container
-  if [ "${MDNS_NAME:-}" ]; then
-    goello-server -name "$MDNS_NAME" -host "$MDNS_HOST" -port "$PORT" -type "$MDNS_TYPE" &
-  fi
   # Start our daily refresher
   aptly::refresh &
 
-  # Start our little caddy
-  exec caddy run -config /config/caddy/main.conf --adapter caddyfile "$@"
+  # Bonjour the container if asked to
+  if [ "${MDNS_ENABLED:-}" == true ]; then
+    goello-server -name "$MDNS_NAME" -host "$MDNS_HOST" -port "$PORT" -type "$MDNS_TYPE" &
+  fi
+
+  # Trick caddy into using the proper location for shit... still, /tmp keeps on being used (possibly by the pki lib?)
+  HOME=/data/caddy-home exec caddy run -config /config/caddy/main.conf --adapter caddyfile "$@"
   ;;
 esac
 
@@ -140,9 +170,9 @@ esac
 # Initialization
 #############################
 # gpg --no-default-keyring --keyring /data/aptly/gpg/trustedkeys.gpg --keyserver pool.sks-keyservers.net --recv-keys 04EE7237B7D453EC 648ACFD622F3D138 EF0F382A1A7B6500 DCC9EFBF77E11517 AA8E81B4331F7F50 112695A0E562B32A
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf -architectures=amd64,arm64,armel,armhf mirror create buster http://deb.debian.org/debian buster main
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf -architectures=amd64,arm64,armel,armhf mirror create buster-updates http://deb.debian.org/debian buster-updates main
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf -architectures=amd64,arm64,armel,armhf mirror create buster-security http://security.debian.org/debian-security buster/updates main
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf -architectures=amd64,arm64,armel,armhf mirror create buster http://deb.debian.org/debian buster main
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf -architectures=amd64,arm64,armel,armhf mirror create buster-updates http://deb.debian.org/debian buster-updates main
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf -architectures=amd64,arm64,armel,armhf mirror create buster-security http://security.debian.org/debian-security buster/updates main
 
 #############################
 # Recurring at DATE=YYYY-MM-DD
@@ -152,23 +182,23 @@ esac
 # LONG_DATE="$(date +%Y%m%dT000000Z)"
 
 # Update the mirrors
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf mirror update $SUITE
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf mirror update $SUITE-updates
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf mirror update $SUITE-security
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf mirror update $SUITE
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf mirror update $SUITE-updates
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf mirror update $SUITE-security
 
 # Create snapshots
-# aptly -config /config/aptly.conf snapshot create $SUITE-$DATE from mirror $SUITE
-# aptly -config /config/aptly.conf snapshot create $SUITE-updates-$DATE from mirror $SUITE-updates
-# aptly -config /config/aptly.conf snapshot create $SUITE-security-$DATE from mirror $SUITE-security
+# aptly -config /config/aptly/main.conf snapshot create $SUITE-$DATE from mirror $SUITE
+# aptly -config /config/aptly/main.conf snapshot create $SUITE-updates-$DATE from mirror $SUITE-updates
+# aptly -config /config/aptly/main.conf snapshot create $SUITE-security-$DATE from mirror $SUITE-security
 
 # Publish snaps
 # gpg --no-default-keyring --keyring /data/aptly/gpg/trustedkeys.gpg --import /data/aptly/gpg/private.pgp
 # Just force gpg to preconfig
 # gpg --no-default-keyring --keyring /data/gpg/trustedkeys.gpg --list-keys
 
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf publish snapshot $SUITE-$DATE :archive/debian/$LONG_DATE
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf publish snapshot $SUITE-updates-$DATE :archive/debian/$LONG_DATE
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf publish snapshot $SUITE-security-$DATE :archive/debian-security/$LONG_DATE
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf publish snapshot $SUITE-$DATE :archive/debian/$LONG_DATE
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf publish snapshot $SUITE-updates-$DATE :archive/debian/$LONG_DATE
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf publish snapshot $SUITE-security-$DATE :archive/debian-security/$LONG_DATE
 
 # XXX aptly serve - use straight caddy from files instead
 # move to https meanwhile
@@ -178,4 +208,4 @@ esac
 # echo "$GPG_PUB" | apt-key add
 # apt-get -o Dir::Etc::SourceList=/dev/stdin update
 
-# XXX to remove: aptly -config /config/aptly.conf publish drop buster-updates :archive/debian/$LONG_DATE
+# XXX to remove: aptly -config /config/aptly/main.conf publish drop buster-updates :archive/debian/$LONG_DATE
