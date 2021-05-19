@@ -156,6 +156,9 @@ VOLUME        /certs
 # Caddy uses this
 VOLUME        /tmp
 
+# Aptly uses this
+VOLUME        /data
+
 ENV           HEALTHCHECK_URL="http://127.0.0.1:10000/?healthcheck"
 
 HEALTHCHECK   --interval=120s --timeout=30s --start-period=10s --retries=1 CMD http-health || exit 1
