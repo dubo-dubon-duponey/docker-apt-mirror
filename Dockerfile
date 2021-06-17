@@ -11,12 +11,15 @@ ARG           GIT_COMMIT=51ebf8ca3d255e0c846307bf72740f731e6210c3
 ARG           GO_BUILD_SOURCE=./cmd/http
 ARG           GO_BUILD_OUTPUT=http-health
 ARG           GO_LD_FLAGS="-s -w"
-ARG           GO_TAGS=""
+ARG           GO_TAGS="netgo osusergo"
 
 WORKDIR       $GOPATH/src/$GIT_REPO
 RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
+ARG           GOOS="$TARGETOS"
+ARG           GOARCH="$TARGETARCH"
+
 # hadolint ignore=SC2046
-RUN           env GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
+RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
                 -ldflags "$GO_LD_FLAGS" -tags "$GO_TAGS" -o /dist/boot/bin/"$GO_BUILD_OUTPUT" "$GO_BUILD_SOURCE"
 
 #######################
@@ -29,12 +32,15 @@ ARG           GIT_COMMIT=3799b6035dd5c4d5d1c061259241a9bedda810d6
 ARG           GO_BUILD_SOURCE=./cmd/server
 ARG           GO_BUILD_OUTPUT=goello-server
 ARG           GO_LD_FLAGS="-s -w"
-ARG           GO_TAGS=""
+ARG           GO_TAGS="netgo osusergo"
 
 WORKDIR       $GOPATH/src/$GIT_REPO
 RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
+ARG           GOOS="$TARGETOS"
+ARG           GOARCH="$TARGETARCH"
+
 # hadolint ignore=SC2046
-RUN           env GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
+RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
                 -ldflags "$GO_LD_FLAGS" -tags "$GO_TAGS" -o /dist/boot/bin/"$GO_BUILD_OUTPUT" "$GO_BUILD_SOURCE"
 
 #######################
@@ -53,8 +59,11 @@ ARG           GO_TAGS="netgo osusergo"
 
 WORKDIR       $GOPATH/src/$GIT_REPO
 RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
+ARG           GOOS="$TARGETOS"
+ARG           GOARCH="$TARGETARCH"
+
 # hadolint ignore=SC2046
-RUN           env GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
+RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
                 -ldflags "$GO_LD_FLAGS" -tags "$GO_TAGS" -o /dist/boot/bin/"$GO_BUILD_OUTPUT" "$GO_BUILD_SOURCE"
 
 #######################
@@ -75,8 +84,11 @@ ARG           GO_LD_FLAGS="-s -w -X main.Version=$GIT_VERSION"
 
 WORKDIR       $GOPATH/src/$GIT_REPO
 RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
+ARG           GOOS="$TARGETOS"
+ARG           GOARCH="$TARGETARCH"
+
 # hadolint ignore=SC2046
-RUN           env GOOS="$TARGETOS" GOARCH="$TARGETARCH" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
+RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
                 -ldflags "$GO_LD_FLAGS" -tags "$GO_TAGS" -o /dist/boot/bin/"$GO_BUILD_OUTPUT" "$GO_BUILD_SOURCE"
 
 #######################
