@@ -108,10 +108,12 @@ aptly::refresh(){
     for mir in $mirros; do
       printf >&2 "Updating existing mirror %s\n" "$mir"
       aptly -keyring="$KEYRING_LOCATION" -config="$CONFIG_LOCATION" -architectures="$ARCHITECTURES" mirror update "$mir"
+    done
 
+    for mir in $mirros; do
       # If we have a published snapshot at that date already, just continue
       printf >&2 "Have a published one already? If yes, continue.\n"
-      ! aptly -config="$CONFIG_LOCATION" -architectures="$ARCHITECTURES" publish show "$mir" :"archive/$mir/$LONG_DATE" > /dev/null || continue
+      ! aptly -config="$CONFIG_LOCATION" -architectures="$ARCHITECTURES" publish list --raw | grep -q "^archive/$mir/$LONG_DATE" > /dev/null || continue
 
       # If we don't have a snapshot, create one
       if ! aptly -config="$CONFIG_LOCATION" -architectures="$ARCHITECTURES" snapshot show "$mir-$DATE" > /dev/null; then
@@ -119,7 +121,7 @@ aptly::refresh(){
         aptly -config="$CONFIG_LOCATION" -architectures="$ARCHITECTURES" snapshot create "$mir-$DATE" from mirror "$mir" > /dev/null
       fi
 
-      # And publish - XXX this fails if one has been published already
+      # And publish
       printf >&2 "And... publish it\n"
       aptly -keyring="$KEYRING_LOCATION" -config="$CONFIG_LOCATION" -architectures="$ARCHITECTURES" publish snapshot "$mir-$DATE" :"archive/$mir/$LONG_DATE" # > /dev/null
     done
