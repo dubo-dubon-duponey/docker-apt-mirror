@@ -124,9 +124,9 @@ RUN           --mount=type=secret,mode=0444,id=CA,dst=/etc/ssl/certs/ca-certific
               --mount=type=secret,id=APT_OPTIONS,dst=/etc/apt/apt.conf.d/dbdbdp.conf \
               apt-get update -qq && \
               apt-get install -qq --no-install-recommends \
-                bzip2=1.0.6-9.2~deb10u1 \
-                xz-utils=5.2.4-1 \
-                gnupg=2.2.12-1+deb10u1 && \
+                bzip2=1.0.8-4 \
+                xz-utils=5.2.5-2 \
+                gnupg=2.2.27-2 && \
               apt-get -qq autoremove      && \
               apt-get -qq clean           && \
               rm -rf /var/lib/apt/lists/* && \
