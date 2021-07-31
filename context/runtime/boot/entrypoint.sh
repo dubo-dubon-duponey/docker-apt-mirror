@@ -63,8 +63,6 @@ readonly GPG_HOME="/data/gpg"
 readonly KEYRING_LOCATION="${KEYRING_LOCATION:-$GPG_HOME/trustedkeys.gpg}"
 
 readonly SUITE=buster
-readonly DATE="$(date +%Y-%m-%d)"
-readonly LONG_DATE="$(date +%Y%m%dT000000Z)"
 
 readonly GPG_ARGS=(--no-default-keyring --keyring "$KEYRING_LOCATION")
 
@@ -103,8 +101,12 @@ $*
 aptly::refresh(){
   local mirros
   local mir
+  local DATE
+  local LONG_DATE
   mirros="$(aptly -config="$CONFIG_LOCATION" -architectures="$ARCHITECTURES" mirror list -raw)"
   while true; do
+    DATE="$(date +%Y-%m-%d)"
+    LONG_DATE="$(date +%Y%m%dT000000Z)"
     for mir in $mirros; do
       printf >&2 "Updating existing mirror %s\n" "$mir"
       aptly -keyring="$KEYRING_LOCATION" -config="$CONFIG_LOCATION" -architectures="$ARCHITECTURES" mirror update "$mir"
@@ -160,10 +162,6 @@ case "$com" in
   gpg::initialize "$@"
   exit
   ;;
-"refresh")
-  aptly::refresh
-  exit
-  ;;
 *)
   # Start our daily refresher
   aptly::refresh
@@ -181,7 +179,7 @@ esac
 #############################
 # Initialization
 #############################
-# gpg --no-default-keyring --keyring /data/aptly/gpg/trustedkeys.gpg --keyserver pool.sks-keyservers.net --recv-keys 04EE7237B7D453EC 648ACFD622F3D138 EF0F382A1A7B6500 DCC9EFBF77E11517 AA8E81B4331F7F50 112695A0E562B32A
+# gpg --no-default-keyring --keyring /data/aptly/gpg/trustedkeys.gpg --keyserver keys.openpgp.org --recv-keys 04EE7237B7D453EC 648ACFD622F3D138 EF0F382A1A7B6500 DCC9EFBF77E11517 AA8E81B4331F7F50 112695A0E562B32A
 # aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf -architectures=amd64,arm64,armel,armhf mirror create buster http://deb.debian.org/debian buster main
 # aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf -architectures=amd64,arm64,armel,armhf mirror create buster-updates http://deb.debian.org/debian buster-updates main
 # aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf -architectures=amd64,arm64,armel,armhf mirror create buster-security http://security.debian.org/debian-security buster/updates main
