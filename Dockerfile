@@ -1,106 +1,78 @@
-ARG           FROM_IMAGE_BUILDER=ghcr.io/dubo-dubon-duponey/base:builder-bullseye-2021-06-01@sha256:addbd9b89d8973df985d2d95e22383961ba7b9c04580ac6a7f406a3a9ec4731e
-ARG           FROM_IMAGE_RUNTIME=ghcr.io/dubo-dubon-duponey/base:runtime-bullseye-2021-06-01@sha256:a2b1b2f69ed376bd6ffc29e2d240e8b9d332e78589adafadb84c73b778e6bc77
+ARG           FROM_REGISTRY=ghcr.io/dubo-dubon-duponey
+
+ARG           FROM_IMAGE_BUILDER=base:builder-bullseye-2021-07-01@sha256:dbe45d04091f027b371e1bd4ea994f095a8b2ebbdd89357c56638fb678218151
+ARG           FROM_IMAGE_RUNTIME=base:runtime-bullseye-2021-07-01@sha256:63060b5109c4d8be7a8b4f97e3bb7431781c07b3b46263e372ab37fb8aae7583
+ARG           FROM_IMAGE_TOOLS=tools:linux-bullseye-2021-07-01@sha256:188493744d1b858e0d99efc250b8b78852ddb3fe50eb63d46f41ee20680c14eb
+
+FROM          $FROM_REGISTRY/$FROM_IMAGE_TOOLS                                                                          AS builder-tools
 
 #######################
-# Extra builder for healthchecker
+# Fetcher
 #######################
-FROM          --platform=$BUILDPLATFORM $FROM_IMAGE_BUILDER                                                             AS builder-healthcheck
+FROM          --platform=$BUILDPLATFORM $FROM_REGISTRY/$FROM_IMAGE_BUILDER                                              AS fetcher-main
 
-ARG           GIT_REPO=github.com/dubo-dubon-duponey/healthcheckers
-ARG           GIT_VERSION=51ebf8c
-ARG           GIT_COMMIT=51ebf8ca3d255e0c846307bf72740f731e6210c3
-ARG           GO_BUILD_SOURCE=./cmd/http
-ARG           GO_BUILD_OUTPUT=http-health
-ARG           GO_LD_FLAGS="-s -w"
-ARG           GO_TAGS="netgo osusergo"
+ENV           GIT_REPO=github.com/aptly-dev/aptly
+ENV           GIT_VERSION=f9d08e1
+ENV           GIT_COMMIT=f9d08e1377970d2b13410da3d1d452b935041a4e
 
-WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
-ARG           GOOS="$TARGETOS"
-ARG           GOARCH="$TARGETARCH"
+ENV           WITH_BUILD_SOURCE="./main.go"
+ENV           WITH_BUILD_OUTPUT="aptly"
 
-# hadolint ignore=SC2046
-RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
-                -ldflags "$GO_LD_FLAGS" -tags "$GO_TAGS" -o /dist/boot/bin/"$GO_BUILD_OUTPUT" "$GO_BUILD_SOURCE"
+ENV           WITH_LDFLAGS="-X main.Version=$GIT_VERSION"
 
-#######################
-# Goello
-#######################
-FROM          --platform=$BUILDPLATFORM $FROM_IMAGE_BUILDER                                                             AS builder-goello
+RUN           git clone --recurse-submodules git://"$GIT_REPO" .
+RUN           git checkout "$GIT_COMMIT"
+RUN           --mount=type=secret,id=CA \
+              --mount=type=secret,id=NETRC \
+              [[ "${GOFLAGS:-}" == *-mod=vendor* ]] || go mod download
 
-ARG           GIT_REPO=github.com/dubo-dubon-duponey/goello
-ARG           GIT_VERSION=3799b60
-ARG           GIT_COMMIT=3799b6035dd5c4d5d1c061259241a9bedda810d6
-ARG           GO_BUILD_SOURCE=./cmd/server
-ARG           GO_BUILD_OUTPUT=goello-server
-ARG           GO_LD_FLAGS="-s -w"
-ARG           GO_TAGS="netgo osusergo"
-
-WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
-ARG           GOOS="$TARGETOS"
-ARG           GOARCH="$TARGETARCH"
-
-# hadolint ignore=SC2046
-RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
-                -ldflags "$GO_LD_FLAGS" -tags "$GO_TAGS" -o /dist/boot/bin/"$GO_BUILD_OUTPUT" "$GO_BUILD_SOURCE"
-
-#######################
-# Caddy
-#######################
-FROM          --platform=$BUILDPLATFORM $FROM_IMAGE_BUILDER                                                             AS builder-caddy
-
-# This is 2.4.0
-ARG           GIT_REPO=github.com/caddyserver/caddy
-ARG           GIT_VERSION=v2.4.0
-ARG           GIT_COMMIT=bc2210247861340c644d9825ac2b2860f8c6e12a
-ARG           GO_BUILD_SOURCE=./cmd/caddy
-ARG           GO_BUILD_OUTPUT=caddy
-ARG           GO_LD_FLAGS="-s -w"
-ARG           GO_TAGS="netgo osusergo"
-
-WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
-ARG           GOOS="$TARGETOS"
-ARG           GOARCH="$TARGETARCH"
-
-# hadolint ignore=SC2046
-RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
-                -ldflags "$GO_LD_FLAGS" -tags "$GO_TAGS" -o /dist/boot/bin/"$GO_BUILD_OUTPUT" "$GO_BUILD_SOURCE"
 
 #######################
 # Main builder
 #######################
-FROM          --platform=$BUILDPLATFORM $FROM_IMAGE_BUILDER                                                             AS builder-main
+FROM          --platform=$BUILDPLATFORM fetcher-main                                                                    AS builder-main
 
-# April 2021 for minor fixes
-ARG           GIT_REPO=github.com/aptly-dev/aptly
-ARG           GIT_VERSION=f9d08e1
-ARG           GIT_COMMIT=f9d08e1377970d2b13410da3d1d452b935041a4e
+ARG           TARGETARCH
+ARG           TARGETOS
+ARG           TARGETVARIANT
+ENV           GOOS=$TARGETOS
+ENV           GOARCH=$TARGETARCH
 
-ARG           GO_BUILD_SOURCE=./main.go
-ARG           GO_BUILD_OUTPUT=aptly
-ARG           GO_LD_FLAGS="-s -w -X main.Version=$GIT_VERSION"
-ARG           GO_TAGS="netgo osusergo"
+ENV           CGO_CFLAGS="${CFLAGS:-} ${ENABLE_PIE:+-fPIE}"
+ENV           GOFLAGS="-trimpath ${ENABLE_PIE:+-buildmode=pie} ${GOFLAGS:-}"
 
-WORKDIR       $GOPATH/src/$GIT_REPO
-RUN           git clone --recurse-submodules git://"$GIT_REPO" . && git checkout "$GIT_COMMIT"
-ARG           GOOS="$TARGETOS"
-ARG           GOARCH="$TARGETARCH"
-
-# hadolint ignore=SC2046
-RUN           env GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)" go build -trimpath $(if [ "$CGO_ENABLED" = 1 ]; then printf "%s" "-buildmode pie"; fi) \
-                -ldflags "$GO_LD_FLAGS" -tags "$GO_TAGS" -o /dist/boot/bin/"$GO_BUILD_OUTPUT" "$GO_BUILD_SOURCE"
+# Important cases being handled:
+# - cannot compile statically with PIE but on amd64 and arm64
+# - cannot compile fully statically with NETCGO
+RUN           export GOARM="$(printf "%s" "$TARGETVARIANT" | tr -d v)"; \
+              [ "${CGO_ENABLED:-}" != 1 ] || { \
+                eval "$(dpkg-architecture -A "$(echo "$TARGETARCH$TARGETVARIANT" | sed -e "s/armv6/armel/" -e "s/armv7/armhf/" -e "s/ppc64le/ppc64el/" -e "s/386/i386/")")"; \
+                export PKG_CONFIG="${DEB_TARGET_GNU_TYPE}-pkg-config"; \
+                export AR="${DEB_TARGET_GNU_TYPE}-ar"; \
+                export CC="${DEB_TARGET_GNU_TYPE}-gcc"; \
+                export CXX="${DEB_TARGET_GNU_TYPE}-g++"; \
+                [ ! "${ENABLE_STATIC:-}" ] || { \
+                  [ ! "${WITH_CGO_NET:-}" ] || { \
+                    ENABLE_STATIC=; \
+                    LDFLAGS="${LDFLAGS:-} -static-libgcc -static-libstdc++"; \
+                  }; \
+                  [ "$GOARCH" == "amd64" ] || [ "$GOARCH" == "arm64" ] || [ "${ENABLE_PIE:-}" != true ] || ENABLE_STATIC=; \
+                }; \
+                WITH_LDFLAGS="${WITH_LDFLAGS:-} -linkmode=external -extld="$CC" -extldflags \"${LDFLAGS:-} ${ENABLE_STATIC:+-static}${ENABLE_PIE:+-pie}\""; \
+                WITH_TAGS="${WITH_TAGS:-} cgo ${ENABLE_STATIC:+static static_build}"; \
+              }; \
+              go build -ldflags "-s -w -v ${WITH_LDFLAGS:-}" -tags "${WITH_TAGS:-} net${WITH_CGO_NET:+c}go osusergo" -o /dist/boot/bin/"$WITH_BUILD_OUTPUT" "$WITH_BUILD_SOURCE"
 
 #######################
-# Builder assembly
+# Builder assembly, XXX should be auditor
 #######################
-FROM          $FROM_IMAGE_BUILDER                                                                                       AS builder
+FROM          --platform=$BUILDPLATFORM $FROM_REGISTRY/$FROM_IMAGE_BUILDER                                              AS builder
 
-COPY          --from=builder-healthcheck /dist/boot/bin /dist/boot/bin
-COPY          --from=builder-goello /dist/boot/bin /dist/boot/bin
-COPY          --from=builder-caddy /dist/boot/bin /dist/boot/bin
-COPY          --from=builder-main /dist/boot/bin /dist/boot/bin
+COPY          --from=builder-main   /dist/boot/bin           /dist/boot/bin
+
+COPY          --from=builder-tools  /boot/bin/goello-server  /dist/boot/bin
+COPY          --from=builder-tools  /boot/bin/caddy          /dist/boot/bin
+COPY          --from=builder-tools  /boot/bin/http-health    /dist/boot/bin
 
 RUN           chmod 555 /dist/boot/bin/*; \
               epoch="$(date --date "$BUILD_CREATED" +%s)"; \
@@ -109,19 +81,18 @@ RUN           chmod 555 /dist/boot/bin/*; \
 #######################
 # Running image
 #######################
-FROM          $FROM_IMAGE_RUNTIME                                                                                       AS runtime
+FROM          $FROM_REGISTRY/$FROM_IMAGE_RUNTIME                                                                        AS runtime
 
 USER          root
 
 # Aptly need these
-RUN           --mount=type=secret,mode=0444,id=CA,dst=/etc/ssl/certs/ca-certificates.crt \
-              --mount=type=secret,id=CERTIFICATE \
-              --mount=type=secret,id=KEY \
-              --mount=type=secret,id=PASSPHRASE \
-              --mount=type=secret,mode=0444,id=GPG.gpg \
+RUN           --mount=type=secret,uid=100,id=CA \
+              --mount=type=secret,uid=100,id=CERTIFICATE \
+              --mount=type=secret,uid=100,id=KEY \
+              --mount=type=secret,uid=100,id=GPG.gpg \
               --mount=type=secret,id=NETRC \
               --mount=type=secret,id=APT_SOURCES \
-              --mount=type=secret,id=APT_OPTIONS,dst=/etc/apt/apt.conf.d/dbdbdp.conf \
+              --mount=type=secret,id=APT_CONFIG \
               apt-get update -qq && \
               apt-get install -qq --no-install-recommends \
                 bzip2=1.0.8-4 \
@@ -150,6 +121,8 @@ ENV           LOG_LEVEL="warn"
 ENV           DOMAIN="apt-mirror.local"
 # Control wether tls is going to be "internal" (eg: self-signed), or alternatively an email address to enable letsencrypt
 ENV           TLS="internal"
+# Either require_and_verify or verify_if_given
+ENV           MTLS_MODE="verify_if_given"
 
 # Realm in case access is authenticated
 ENV           REALM="My Precious Realm"
@@ -179,104 +152,3 @@ VOLUME        /data
 ENV           HEALTHCHECK_URL="http://127.0.0.1:10000/?healthcheck"
 
 HEALTHCHECK   --interval=120s --timeout=30s --start-period=10s --retries=1 CMD http-health || exit 1
-
-# With the final script:
-# CONFIG_LOCATION=/config/aptly.conf KEYRING_LOCATION=/data/aptly/gpg/trustedkeys.gpg ARCHITECTURES=amd64 ./test.sh trust keys.gnupg.net 04EE7237B7D453EC 648ACFD622F3D138 EF0F382A1A7B6500 DCC9EFBF77E11517 AA8E81B4331F7F50 112695A0E562B32A
-# CONFIG_LOCATION=/config/aptly.conf KEYRING_LOCATION=/data/aptly/gpg/trustedkeys.gpg ARCHITECTURES=amd64 ./test.sh aptly mirror create buster-updates http://deb.debian.org/debian buster-updates main
-
-
-# With aptly
-# gpg --no-default-keyring --keyring trustedkeys.gpg --keyserver keys.gnupg.net --recv-keys AA8E81B4331F7F50 112695A0E562B32A
-# aptly -gpg-provider=internal -architectures=amd64,arm64,armel,armhf mirror create debian-security http:// buster/updates main
-# aptly mirror update debian-security
-# aptly snapshot create debian-security-2020-08-10 from mirror debian-security
-# aptly publish snapshot debian-security-2020-08-10 buster/updates:archive/debian-security/20200801T000000Z
-
-# aptly publish snapshot debian-security-2020-08-10 :archive/debian-security/20200810T000000Z
-
-
-# deb http://snapshot.debian.org/archive/debian/20200607T000000Z buster main
-#deb http://deb.debian.org/debian buster main
-# deb http://snapshot.debian.org/archive/debian-security/20200607T000000Z buster/updates main
-#deb http://security.debian.org/debian-security buster/updates main
-# deb http://snapshot.debian.org/archive/debian/20200607T000000Z buster-updates main
-#deb http://deb.debian.org/debian buster-updates main
-
-# All in
-# gpg --no-default-keyring --keyring trustedkeys.gpg --keyserver keys.gnupg.net --recv-keys EF0F382A1A7B6500 DCC9EFBF77E11517
-# aptly -architectures=amd64,arm64,armel,armhf mirror create buster http://deb.debian.org/debian buster main
-
-# gpg --no-default-keyring --keyring trustedkeys.gpg --keyserver keys.gnupg.net --recv-keys 04EE7237B7D453EC 648ACFD622F3D138
-# aptly -architectures=amd64,arm64,armel,armhf mirror create buster-updates http://deb.debian.org/debian buster-updates main
-
-# gpg --no-default-keyring --keyring trustedkeys.gpg --keyserver keys.gnupg.net --recv-keys AA8E81B4331F7F50 112695A0E562B32A
-# aptly -architectures=amd64,arm64,armel,armhf mirror create buster-security http://security.debian.org/debian-security buster/updates main
-
-# aptly mirror update buster
-# aptly mirror update buster-updates
-# aptly mirror update buster-security
-
-# aptly snapshot create buster-2020-08-10 from mirror buster
-# aptly snapshot create buster-updates-2020-08-10 from mirror buster-updates
-# aptly snapshot create buster-security-2020-08-10 from mirror buster-security
-
-# gpg --gen-key
-# aptly -skip-signing publish snapshot buster-updates-2020-08-10 :archive/debian/20200810T000000Z
-
-# aptly serve
-
-
-# gpg --output public.pgp --armor --export foo@bar.com
-# apt-key add yak.pgp
-
-
-#############################
-# Key generation part
-#############################
-# gpg --gen-key
-# gpg --output public.pgp --armor --export dubo-dubon-duponey@farcloser.world
-# gpg --output private.pgp --armor --export-secret-key dubo-dubon-duponey@farcloser.world
-
-#############################
-# Initialization
-#############################
-# gpg --no-default-keyring --keyring /data/aptly/gpg/trustedkeys.gpg --keyserver pool.sks-keyservers.net --recv-keys 04EE7237B7D453EC 648ACFD622F3D138 EF0F382A1A7B6500 DCC9EFBF77E11517 AA8E81B4331F7F50 112695A0E562B32A
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf -architectures=amd64,arm64,armel,armhf mirror create buster http://deb.debian.org/debian buster main
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf -architectures=amd64,arm64,armel,armhf mirror create buster-updates http://deb.debian.org/debian buster-updates main
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf -architectures=amd64,arm64,armel,armhf mirror create buster-security http://security.debian.org/debian-security buster/updates main
-
-#############################
-# Recurring at DATE=YYYY-MM-DD
-#############################
-# SUITE=buster
-# DATE="$(date +%Y-%m-%d)"
-# LONG_DATE="$(date +%Y%m%dT000000Z)"
-
-# Update the mirrors
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf mirror update $SUITE
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf mirror update $SUITE-updates
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf mirror update $SUITE-security
-
-# Create snapshots
-# aptly -config /config/aptly.conf snapshot create $SUITE-$DATE from mirror $SUITE
-# aptly -config /config/aptly.conf snapshot create $SUITE-updates-$DATE from mirror $SUITE-updates
-# aptly -config /config/aptly.conf snapshot create $SUITE-security-$DATE from mirror $SUITE-security
-
-# Publish snaps
-# gpg --no-default-keyring --keyring /data/aptly/gpg/trustedkeys.gpg --import /data/aptly/gpg/private.pgp
-# Just force gpg to preconfig
-# gpg --no-default-keyring --keyring /data/aptly/gpg/trustedkeys.gpg --list-keys>
-
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf publish snapshot $SUITE-$DATE :archive/debian/$LONG_DATE
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf publish snapshot $SUITE-updates-$DATE :archive/debian/$LONG_DATE
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf publish snapshot $SUITE-security-$DATE :archive/debian-security/$LONG_DATE
-
-# XXX aptly serve - use straight caddy from files instead
-# move to https meanwhile
-# add authentication
-# deliver the public key as part of the filesystem
-# On the receiving end
-# echo "$GPG_PUB" | apt-key add
-# apt-get -o Dir::Etc::SourceList=/dev/stdin update
-
-# XXX to remove: aptly -config /config/aptly.conf publish drop buster-updates :archive/debian/$LONG_DATE
