@@ -62,7 +62,7 @@ readonly CONFIG_LOCATION="${CONFIG_LOCATION:-/config/aptly/main.conf}"
 readonly GPG_HOME="/data/gpg"
 readonly KEYRING_LOCATION="${KEYRING_LOCATION:-$GPG_HOME/trustedkeys.gpg}"
 
-readonly SUITE=buster
+readonly SUITE=bullseye
 
 readonly GPG_ARGS=(--no-default-keyring --keyring "$KEYRING_LOCATION")
 
