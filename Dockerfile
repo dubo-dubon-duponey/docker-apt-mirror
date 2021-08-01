@@ -1,8 +1,8 @@
 ARG           FROM_REGISTRY=ghcr.io/dubo-dubon-duponey
 
-ARG           FROM_IMAGE_BUILDER=base:builder-bullseye-2021-07-01@sha256:dbe45d04091f027b371e1bd4ea994f095a8b2ebbdd89357c56638fb678218151
-ARG           FROM_IMAGE_RUNTIME=base:runtime-bullseye-2021-07-01@sha256:63060b5109c4d8be7a8b4f97e3bb7431781c07b3b46263e372ab37fb8aae7583
-ARG           FROM_IMAGE_TOOLS=tools:linux-bullseye-2021-07-01@sha256:188493744d1b858e0d99efc250b8b78852ddb3fe50eb63d46f41ee20680c14eb
+ARG           FROM_IMAGE_BUILDER=base:builder-bullseye-2021-07-01@sha256:f1c46316c38cc1ca54fd53b54b73797b35ba65ee727beea1a5ed08d0ad7e8ccf
+ARG           FROM_IMAGE_RUNTIME=base:runtime-bullseye-2021-07-01@sha256:9f5b20d392e1a1082799b3befddca68cee2636c72c502aa7652d160896f85b36
+ARG           FROM_IMAGE_TOOLS=tools:linux-bullseye-2021-07-01@sha256:f1e25694fe933c7970773cb323975bb5c995fa91d0c1a148f4f1c131cbc5872c
 
 FROM          $FROM_REGISTRY/$FROM_IMAGE_TOOLS                                                                          AS builder-tools
 
@@ -76,7 +76,7 @@ COPY          --from=builder-tools  /boot/bin/http-health    /dist/boot/bin
 
 RUN           chmod 555 /dist/boot/bin/*; \
               epoch="$(date --date "$BUILD_CREATED" +%s)"; \
-              find /dist/boot/bin -newermt "@$epoch" -exec touch --no-dereference --date="@$epoch" '{}' +;
+              find /dist/boot -newermt "@$epoch" -exec touch --no-dereference --date="@$epoch" '{}' +;
 
 #######################
 # Running image
@@ -106,10 +106,12 @@ RUN           --mount=type=secret,uid=100,id=CA \
 
 USER          dubo-dubon-duponey
 
-COPY          --from=builder --chown=$BUILD_UID:root /dist /
-
 # Which architectures to mirror
 ENV           ARCHITECTURES=armel,armhf,arm64,amd64,s390x,ppc64el,i386
+
+ENV           NICK="apt-mirror"
+
+COPY          --from=builder --chown=$BUILD_UID:root /dist /
 
 ### Front server configuration
 # Port to use
@@ -118,7 +120,7 @@ EXPOSE        4443
 # Log verbosity for
 ENV           LOG_LEVEL="warn"
 # Domain name to serve
-ENV           DOMAIN="apt-mirror.local"
+ENV           DOMAIN="$NICK.local"
 # Control wether tls is going to be "internal" (eg: self-signed), or alternatively an email address to enable letsencrypt
 ENV           TLS="internal"
 # Either require_and_verify or verify_if_given
@@ -134,9 +136,9 @@ ENV           PASSWORD=""
 # Enable/disable mDNS support
 ENV           MDNS_ENABLED=false
 # Name is used as a short description for the service
-ENV           MDNS_NAME="Aptly mDNS display name"
+ENV           MDNS_NAME="mDNS display name"
 # The service will be annonced and reachable at $MDNS_HOST.local
-ENV           MDNS_HOST="apt-mirror"
+ENV           MDNS_HOST="$NICK"
 # Type to advertise
 ENV           MDNS_TYPE="_http._tcp"
 
@@ -146,7 +148,7 @@ VOLUME        /certs
 # Caddy uses this
 VOLUME        /tmp
 
-# Aptly uses this
+# Used by the backend service
 VOLUME        /data
 
 ENV           HEALTHCHECK_URL="http://127.0.0.1:10000/?healthcheck"
