@@ -134,7 +134,7 @@ ENV           TLS_MIN=1.2
 # Either require_and_verify or verify_if_given
 ENV           TLS_MTLS_MODE="verify_if_given"
 # Issuer name to appear in certificates
-ENV           TLS_ISSUER="Dubo Dubon Duponey"
+#ENV           TLS_ISSUER="Dubo Dubon Duponey"
 # Either disable_redirects or ignore_loaded_certs if one wants the redirects
 ENV           TLS_AUTO=disable_redirects
 
@@ -143,7 +143,7 @@ ENV           AUTH_ENABLED=false
 ENV           AUTH_REALM="My Precious Realm"
 # Provide username and password here (call the container with the "hash" command to generate a properly encrypted password, otherwise, a random one will be generated)
 ENV           AUTH_USERNAME="dubo-dubon-duponey"
-ENV           AUTH_PASSWORD="replace_me"
+ENV           AUTH_PASSWORD="cmVwbGFjZV9tZV93aXRoX3NvbWV0aGluZwo="
 
 ### mDNS broadcasting
 # Enable/disable mDNS support
