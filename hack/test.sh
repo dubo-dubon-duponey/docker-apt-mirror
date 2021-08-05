@@ -8,12 +8,14 @@ readonly name="${1:-image}"
 shift || true
 
 # Simple no-thrill build tester
+# XXX Currently reduced to a single architecture to avoid using all disk space until we figure out our space efficiency problem (likely the fat builder image getting duplicated over and over)
+# Solution would probably be to do like buildkit and fetch with a lightweight go image while build mount from the previous stage instead of inheriting - annoying but probably the only way
 if ! "$root/hack/build.sh" \
     --inject registry="ghcr.io/dubo-dubon-duponey" \
     --inject progress=plain \
 	  --inject date=2021-08-01 \
 	  --inject suite=bullseye \
-    --inject platforms=linux/amd64,linux/arm64 \
+    --inject platforms=linux/arm64 \
   	"$name" "$@"; then
   printf >&2 "Failed building\n"
   exit 1

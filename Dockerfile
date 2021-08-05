@@ -20,8 +20,7 @@ ENV           WITH_BUILD_OUTPUT="aptly"
 
 ENV           WITH_LDFLAGS="-X main.Version=$GIT_VERSION"
 
-RUN           git clone --recurse-submodules git://"$GIT_REPO" .
-RUN           git checkout "$GIT_COMMIT"
+RUN           git clone --recurse-submodules git://"$GIT_REPO" .; git checkout "$GIT_COMMIT"
 RUN           --mount=type=secret,id=CA \
               --mount=type=secret,id=NETRC \
               [[ "${GOFLAGS:-}" == *-mod=vendor* ]] || go mod download
