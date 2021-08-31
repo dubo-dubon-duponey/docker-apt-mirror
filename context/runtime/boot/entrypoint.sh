@@ -153,7 +153,7 @@ case "$com" in
   exit
   ;;
 "trust")
-  # Typically "key server" "keys...": keys.gnupg.net 04EE7237B7D453EC 648ACFD622F3D138 EF0F382A1A7B6500 DCC9EFBF77E11517 AA8E81B4331F7F50 112695A0E562B32A
+  # Typically "key server" "keys...": hkps://keyserver.ubuntu.com 04EE7237B7D453EC 648ACFD622F3D138 EF0F382A1A7B6500 DCC9EFBF77E11517 AA8E81B4331F7F50 112695A0E562B32A
   gpg::trust "$@"
   exit
   ;;
@@ -163,6 +163,16 @@ case "$com" in
   exit
   ;;
 *)
+  # XXX this is problematic - one can start mirroring without the keys apparently
+  # ending up in a borked situation where aptly will not start
+  # One solution would be to pass the trusted keys in an env here and always trust on start
+  # Debian 9
+  #gpg::trust hkps://keyserver.ubuntu.com EF0F382A1A7B6500 04EE7237B7D453EC AA8E81B4331F7F50
+  # Debian 10
+  #gpg::trust hkps://keyserver.ubuntu.com DCC9EFBF77E11517 648ACFD622F3D138 112695A0E562B32A
+  # Debian 11
+  #gpg::trust hkps://keyserver.ubuntu.com 0E98404D386FA1D9 54404762BBB6E853 605C66F00D6C9793
+
   # Start our daily refresher
   aptly::refresh
   ;;

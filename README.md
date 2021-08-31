@@ -8,8 +8,13 @@ docker run -d \
     --read-only \
     dubodubonduponey/aptly
 
-# Trust Debian keys
-docker exec -ti apt-mirror /boot/entrypoint.sh trust keys.gnupg.net 04EE7237B7D453EC 648ACFD622F3D138 EF0F382A1A7B6500 DCC9EFBF77E11517 AA8E81B4331F7F50 112695A0E562B32A
+# Trust whichever keys you want to trust
+# Debian 9
+docker exec -ti apt-mirror /boot/entrypoint.sh trust hkps://keyserver.ubuntu.com EF0F382A1A7B6500 04EE7237B7D453EC AA8E81B4331F7F50
+# Debian 10
+docker exec -ti apt-mirror /boot/entrypoint.sh trust hkps://keyserver.ubuntu.com DCC9EFBF77E11517 648ACFD622F3D138 112695A0E562B32A
+# Debian 11
+docker exec -ti apt-mirror /boot/entrypoint.sh trust hkps://keyserver.ubuntu.com 0E98404D386FA1D9 54404762BBB6E853 605C66F00D6C9793
 
 # Generate your signing key
 docker exec -ti apt-mirror /boot/entrypoint.sh init "Dubo Dubon Duponey" dubodubonduponey@jsboot.space
