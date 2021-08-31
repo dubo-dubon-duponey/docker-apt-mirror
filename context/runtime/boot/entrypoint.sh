@@ -173,6 +173,8 @@ case "$com" in
   # Debian 11
   #gpg::trust hkps://keyserver.ubuntu.com 0E98404D386FA1D9 54404762BBB6E853 605C66F00D6C9793
 
+  # Clean dangling locks
+  rm -f /data/aptly/db/LOCK
   # Start our daily refresher
   aptly::refresh
   ;;
