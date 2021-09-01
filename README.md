@@ -1,12 +1,13 @@
-# Docker Aptly
+# Docker Apt Mirror
 
 ```bash
 
 # Start the way you want
 docker run -d \
+    --name apt-mirror \
     --cap-drop ALL \
     --read-only \
-    dubodubonduponey/aptly
+    ghcr.io/dubo-dubon-duponey/apt-mirror
 
 # Trust whichever keys you want to trust
 # Debian 9

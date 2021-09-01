@@ -29,13 +29,13 @@ cakes: {
 
 			output: {
 				images: {
-					names: [...string] | * ["aptly"],
+					names: [...string] | * ["apt-mirror"],
 					tags: [...string] | * ["latest"]
 				}
 			}
 
 			metadata: {
-				title: string | * "Dubo Aptly",
+				title: string | * "Dubo Apt Mirror",
 				description: string | * "A dubo image for Aptly",
 			}
 		}
