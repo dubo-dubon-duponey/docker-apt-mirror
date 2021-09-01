@@ -1,23 +1,68 @@
 #!/usr/bin/env bash
 set -o errexit -o errtrace -o functrace -o nounset -o pipefail
 
-# Ensure the data folder is writable
-[ -w "/data" ] || {
+[ -w /certs ] || {
+  printf >&2 "/certs is not writable. Check your mount permissions.\n"
+  exit 1
+}
+
+[ -w /tmp ] || {
+  printf >&2 "/tmp is not writable. Check your mount permissions.\n"
+  exit 1
+}
+
+[ -w /data ] || {
   printf >&2 "/data is not writable. Check your mount permissions.\n"
   exit 1
 }
 
+# Helpers
+case "${1:-run}" in
+  # Short hand helper to generate password hash
+  "hash")
+    shift
+    printf >&2 "Generating password hash\n"
+    caddy hash-password -algorithm bcrypt "$@"
+    exit
+  ;;
+  # Helper to get the ca.crt out (once initialized)
+  "cert")
+    if [ "${TLS:-}" == "" ]; then
+      printf >&2 "Your container is not configured for TLS termination - there is no local CA in that case."
+      exit 1
+    fi
+    if [ "${TLS:-}" != "internal" ]; then
+      printf >&2 "Your container uses letsencrypt - there is no local CA in that case."
+      exit 1
+    fi
+    if [ ! -e /certs/pki/authorities/local/root.crt ]; then
+      printf >&2 "No root certificate installed or generated. Run the container so that a cert is generated, or provide one at runtime."
+      exit 1
+    fi
+    cat /certs/pki/authorities/local/root.crt
+    exit
+  ;;
+  "run")
+    # Bonjour the container if asked to. While the PORT is no guaranteed to be mapped on the host in bridge, this does not matter since mDNS will not work at all in bridge mode.
+    if [ "${MDNS_ENABLED:-}" == true ]; then
+      goello-server -json "$(printf '[{"Type": "%s", "Name": "%s", "Host": "%s", "Port": %s, "Text": {}}]' "$MDNS_TYPE" "$MDNS_NAME" "$MDNS_HOST" "$PORT")" &
+    fi
+
+    # If we want TLS and authentication, start caddy in the background
+    if [ "${TLS:-}" ]; then
+      HOME=/tmp/caddy-home caddy run -config /config/caddy/main.conf --adapter caddyfile &
+    fi
+  ;;
+esac
+
 # System constants
-readonly PORT="${PORT:-}"
 readonly ARCHITECTURES="${ARCHITECTURES:-}"
 
-readonly CONFIG_LOCATION="${CONFIG_LOCATION:-/config/aptly.conf}"
+readonly CONFIG_LOCATION="${CONFIG_LOCATION:-/config/aptly/main.conf}"
 readonly GPG_HOME="/data/gpg"
 readonly KEYRING_LOCATION="${KEYRING_LOCATION:-$GPG_HOME/trustedkeys.gpg}"
 
-readonly SUITE=buster
-readonly DATE="$(date +%Y-%m-%d)"
-readonly LONG_DATE="$(date +%Y%m%dT000000Z)"
+readonly SUITE=bullseye
 
 readonly GPG_ARGS=(--no-default-keyring --keyring "$KEYRING_LOCATION")
 
@@ -50,33 +95,39 @@ $*
 %echo done" | gpg "${GPG_ARGS[@]}" --batch --generate-key /dev/stdin >/dev/null 2>&1
   gpg "${GPG_ARGS[@]}" --output "$GPG_HOME"/snapshot-signing-public-key.pgp --armor --export "$mail"
 #  gpg --no-default-keyring --keyring "$GPG_HOME"/trusted-export.gpg --import "$GPG_HOME"/snapshot-signing-public-key.pgp
-  >&2 printf "You need to apt-key add %s to consume this repo\n" "$GPG_HOME/snapshot-signing-public-key.pgp"
+  printf >&2 "You need to apt-key add %s to consume this repo\n" "$GPG_HOME/snapshot-signing-public-key.pgp"
 }
 
 aptly::refresh(){
   local mirros
   local mir
+  local DATE
+  local LONG_DATE
   mirros="$(aptly -config="$CONFIG_LOCATION" -architectures="$ARCHITECTURES" mirror list -raw)"
   while true; do
+    DATE="$(date +%Y-%m-%d)"
+    LONG_DATE="$(date +%Y%m%dT000000Z)"
     for mir in $mirros; do
-      >&2 printf "Updating existing mirror %s\n" "$mir"
+      printf >&2 "Updating existing mirror %s\n" "$mir"
       aptly -keyring="$KEYRING_LOCATION" -config="$CONFIG_LOCATION" -architectures="$ARCHITECTURES" mirror update "$mir"
+    done
 
+    for mir in $mirros; do
       # If we have a published snapshot at that date already, just continue
-      >&2 printf "Have a published one already? If yes, continue.\n"
-      ! aptly -config="$CONFIG_LOCATION" -architectures="$ARCHITECTURES" publish show "$mir" :"archive/$mir/$LONG_DATE" > /dev/null || continue
+      printf >&2 "Have a published one already? If yes, continue.\n"
+      ! aptly -config="$CONFIG_LOCATION" -architectures="$ARCHITECTURES" publish list --raw | grep -q "^archive/$mir/$LONG_DATE" > /dev/null || continue
 
       # If we don't have a snapshot, create one
       if ! aptly -config="$CONFIG_LOCATION" -architectures="$ARCHITECTURES" snapshot show "$mir-$DATE" > /dev/null; then
-        >&2 printf "No snapshot yet for that date and mirror, create one.\n"
+        printf >&2 "No snapshot yet for that date and mirror, create one.\n"
         aptly -config="$CONFIG_LOCATION" -architectures="$ARCHITECTURES" snapshot create "$mir-$DATE" from mirror "$mir" > /dev/null
       fi
 
       # And publish
-      >&2 printf "And... publish it\n"
+      printf >&2 "And... publish it\n"
       aptly -keyring="$KEYRING_LOCATION" -config="$CONFIG_LOCATION" -architectures="$ARCHITECTURES" publish snapshot "$mir-$DATE" :"archive/$mir/$LONG_DATE" # > /dev/null
     done
-    >&2 printf "Going to sleep for a day now\n"
+    printf >&2 "Going to sleep for a day now\n"
     sleep 86400
   done
 }
@@ -102,7 +153,7 @@ case "$com" in
   exit
   ;;
 "trust")
-  # Typically "key server" "keys...": keys.gnupg.net 04EE7237B7D453EC 648ACFD622F3D138 EF0F382A1A7B6500 DCC9EFBF77E11517 AA8E81B4331F7F50 112695A0E562B32A
+  # Typically "key server" "keys...": hkps://keyserver.ubuntu.com 04EE7237B7D453EC 648ACFD622F3D138 EF0F382A1A7B6500 DCC9EFBF77E11517 AA8E81B4331F7F50 112695A0E562B32A
   gpg::trust "$@"
   exit
   ;;
@@ -111,20 +162,21 @@ case "$com" in
   gpg::initialize "$@"
   exit
   ;;
-"refresh")
-  aptly::refresh
-  exit
-  ;;
 *)
-  # Bonjour the container
-  if [ "${MDNS_NAME:-}" ]; then
-    goello-server -name "$MDNS_NAME" -host "$MDNS_HOST" -port "$PORT" -type "$MDNS_TYPE" &
-  fi
-  # Start our daily refresher
-  aptly::refresh &
+  # XXX this is problematic - one can start mirroring without the keys apparently
+  # ending up in a borked situation where aptly will not start
+  # One solution would be to pass the trusted keys in an env here and always trust on start
+  # Debian 9
+  #gpg::trust hkps://keyserver.ubuntu.com EF0F382A1A7B6500 04EE7237B7D453EC AA8E81B4331F7F50
+  # Debian 10
+  #gpg::trust hkps://keyserver.ubuntu.com DCC9EFBF77E11517 648ACFD622F3D138 112695A0E562B32A
+  # Debian 11
+  #gpg::trust hkps://keyserver.ubuntu.com 0E98404D386FA1D9 54404762BBB6E853 605C66F00D6C9793
 
-  # Start our little caddy
-  exec caddy run -config /config/caddy/main.conf --adapter caddyfile "$@"
+  # Clean dangling locks
+  rm -f /data/aptly/db/LOCK
+  # Start our daily refresher
+  aptly::refresh
   ;;
 esac
 
@@ -139,10 +191,10 @@ esac
 #############################
 # Initialization
 #############################
-# gpg --no-default-keyring --keyring /data/aptly/gpg/trustedkeys.gpg --keyserver pool.sks-keyservers.net --recv-keys 04EE7237B7D453EC 648ACFD622F3D138 EF0F382A1A7B6500 DCC9EFBF77E11517 AA8E81B4331F7F50 112695A0E562B32A
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf -architectures=amd64,arm64,armel,armhf mirror create buster http://deb.debian.org/debian buster main
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf -architectures=amd64,arm64,armel,armhf mirror create buster-updates http://deb.debian.org/debian buster-updates main
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf -architectures=amd64,arm64,armel,armhf mirror create buster-security http://security.debian.org/debian-security buster/updates main
+# gpg --no-default-keyring --keyring /data/aptly/gpg/trustedkeys.gpg --keyserver keys.openpgp.org --recv-keys 04EE7237B7D453EC 648ACFD622F3D138 EF0F382A1A7B6500 DCC9EFBF77E11517 AA8E81B4331F7F50 112695A0E562B32A
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf -architectures=amd64,arm64,armel,armhf mirror create buster http://deb.debian.org/debian buster main
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf -architectures=amd64,arm64,armel,armhf mirror create buster-updates http://deb.debian.org/debian buster-updates main
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf -architectures=amd64,arm64,armel,armhf mirror create buster-security http://security.debian.org/debian-security buster/updates main
 
 #############################
 # Recurring at DATE=YYYY-MM-DD
@@ -152,23 +204,23 @@ esac
 # LONG_DATE="$(date +%Y%m%dT000000Z)"
 
 # Update the mirrors
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf mirror update $SUITE
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf mirror update $SUITE-updates
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf mirror update $SUITE-security
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf mirror update $SUITE
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf mirror update $SUITE-updates
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf mirror update $SUITE-security
 
 # Create snapshots
-# aptly -config /config/aptly.conf snapshot create $SUITE-$DATE from mirror $SUITE
-# aptly -config /config/aptly.conf snapshot create $SUITE-updates-$DATE from mirror $SUITE-updates
-# aptly -config /config/aptly.conf snapshot create $SUITE-security-$DATE from mirror $SUITE-security
+# aptly -config /config/aptly/main.conf snapshot create $SUITE-$DATE from mirror $SUITE
+# aptly -config /config/aptly/main.conf snapshot create $SUITE-updates-$DATE from mirror $SUITE-updates
+# aptly -config /config/aptly/main.conf snapshot create $SUITE-security-$DATE from mirror $SUITE-security
 
 # Publish snaps
 # gpg --no-default-keyring --keyring /data/aptly/gpg/trustedkeys.gpg --import /data/aptly/gpg/private.pgp
 # Just force gpg to preconfig
 # gpg --no-default-keyring --keyring /data/gpg/trustedkeys.gpg --list-keys
 
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf publish snapshot $SUITE-$DATE :archive/debian/$LONG_DATE
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf publish snapshot $SUITE-updates-$DATE :archive/debian/$LONG_DATE
-# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly.conf publish snapshot $SUITE-security-$DATE :archive/debian-security/$LONG_DATE
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf publish snapshot $SUITE-$DATE :archive/debian/$LONG_DATE
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf publish snapshot $SUITE-updates-$DATE :archive/debian/$LONG_DATE
+# aptly -keyring=/data/aptly/gpg/trustedkeys.gpg -config /config/aptly/main.conf publish snapshot $SUITE-security-$DATE :archive/debian-security/$LONG_DATE
 
 # XXX aptly serve - use straight caddy from files instead
 # move to https meanwhile
@@ -178,4 +230,4 @@ esac
 # echo "$GPG_PUB" | apt-key add
 # apt-get -o Dir::Etc::SourceList=/dev/stdin update
 
-# XXX to remove: aptly -config /config/aptly.conf publish drop buster-updates :archive/debian/$LONG_DATE
+# XXX to remove: aptly -config /config/aptly/main.conf publish drop buster-updates :archive/debian/$LONG_DATE
